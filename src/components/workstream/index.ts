@@ -12,3 +12,6 @@ export * from './WorkstreamDeliverModal';
 export * from './WorkstreamRevisionModal';
 export * from './WorkstreamWorkspace';
 export * from './WorkstreamVideoCallModal';
+export * from './WorkstreamHeader';
+export * from './WorkstreamTabs';
+export * from './WorkstreamEmptyState';

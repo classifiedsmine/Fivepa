@@ -57,19 +57,21 @@ export const WorkstreamReleaseModal: React.FC<WorkstreamReleaseModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
-            <div>
-              <span className="text-[11px] text-slate-400 uppercase font-semibold block">
-                Total Escrow Release
-              </span>
-              <span className="text-xl font-bold font-mono text-emerald-600">
-                ${order.amount.toLocaleString()} USD
+          {order.status !== 'completed' && (
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+              <div>
+                <span className="text-[11px] text-slate-400 uppercase font-semibold block">
+                  Total Escrow Release
+                </span>
+                <span className="text-xl font-bold font-mono text-emerald-600">
+                  ${order.amount.toLocaleString()} USD
+                </span>
+              </div>
+              <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase rounded-full">
+                Instant Payout
               </span>
             </div>
-            <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase rounded-full">
-              Instant Payout
-            </span>
-          </div>
+          )}
 
           <div>
             <label className="block text-fiverr-dark font-bold uppercase tracking-wider text-[10px] mb-2">
@@ -115,7 +117,11 @@ export const WorkstreamReleaseModal: React.FC<WorkstreamReleaseModalProps> = ({
 
           <div className="p-3 bg-emerald-50 text-[11px] text-emerald-800 rounded-2xl border border-emerald-200 flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>Releasing escrow marks the project as completed and transfers earnings to the seller.</span>
+            <span>
+              {order.status === 'completed' 
+                ? 'Your feedback will be published on the completed order and collaborator profile.' 
+                : 'Releasing escrow marks the project as completed and transfers earnings to the seller.'}
+            </span>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">
@@ -130,7 +136,7 @@ export const WorkstreamReleaseModal: React.FC<WorkstreamReleaseModalProps> = ({
               type="submit"
               className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-xs transition cursor-pointer"
             >
-              Confirm & Release Funds
+              {order.status === 'completed' ? 'Submit Review' : 'Confirm & Release Funds'}
             </button>
           </div>
         </form>

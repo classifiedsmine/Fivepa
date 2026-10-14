@@ -34089,6 +34089,51 @@ app.post("/api/support-tickets", requireAuth, (req, res) => {
   });
   res.json(newTicket);
 });
+var WORKSTREAM_UPLOADS_DIR = path2.join(__dirname2, "data", "uploads", "workstream");
+if (!fs2.existsSync(WORKSTREAM_UPLOADS_DIR)) {
+  fs2.mkdirSync(WORKSTREAM_UPLOADS_DIR, { recursive: true });
+}
+app.post("/api/workstream/upload", import_express.default.raw({ type: "*/*", limit: "50mb" }), (req, res) => {
+  try {
+    const rawName = req.query.name || "attachment";
+    const decodedName = decodeURIComponent(rawName);
+    const safeBase = path2.basename(decodedName).replace(/[^a-zA-Z0-9._-]/g, "_") || "file";
+    const ext = path2.extname(safeBase);
+    const nameWithoutExt = path2.basename(safeBase, ext);
+    const storedFilename = `${Date.now()}_${randomUUID2().slice(0, 8)}_${nameWithoutExt}${ext}`;
+    const filePath = path2.join(WORKSTREAM_UPLOADS_DIR, storedFilename);
+    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || "");
+    if (!buffer || buffer.length === 0) {
+      return res.status(400).json({ error: "No file data received" });
+    }
+    fs2.writeFileSync(filePath, buffer);
+    const bytes = buffer.length;
+    const sizeStr = bytes > 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    const mimeType = req.headers["content-type"] || "application/octet-stream";
+    res.json({
+      name: safeBase,
+      size: sizeStr,
+      url: `/api/workstream/files/${storedFilename}`,
+      type: mimeType
+    });
+  } catch (err) {
+    console.error("Workstream file upload error:", err);
+    res.status(500).json({ error: "Failed to save uploaded file" });
+  }
+});
+app.get("/api/workstream/files/:filename", (req, res) => {
+  const filename = path2.basename(req.params.filename);
+  const filePath = path2.join(WORKSTREAM_UPLOADS_DIR, filename);
+  if (!fs2.existsSync(filePath)) {
+    return res.status(404).json({ error: "File not found" });
+  }
+  const parts = filename.split("_");
+  const originalName = parts.length > 2 ? parts.slice(2).join("_") : filename;
+  if (req.query.download === "1") {
+    return res.download(filePath, originalName);
+  }
+  res.sendFile(filePath);
+});
 app.get("/api/messages/:orderId", (req, res) => {
   const filtered = messages.filter((m) => m.orderId === req.params.orderId);
   res.json(filtered);

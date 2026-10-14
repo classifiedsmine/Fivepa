@@ -31,19 +31,33 @@ export const WorkstreamMessageInput: React.FC<WorkstreamMessageInputProps> = ({
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const sizeStr = file.size > 1024 * 1024 
-        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` 
-        : `${Math.round(file.size / 1024)} KB`;
-      
-      const fileUrl = URL.createObjectURL(file);
-      onAttachFile({
-        name: file.name,
-        size: sizeStr,
-        url: fileUrl
+    if (!file) return;
+
+    const fallbackSizeStr = file.size > 1024 * 1024 
+      ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` 
+      : `${Math.round(file.size / 1024)} KB`;
+
+    try {
+      const res = await fetch(`/api/workstream/upload?name=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream'
+        },
+        body: file
       });
+      if (res.ok) {
+        const data = await res.json();
+        onAttachFile({
+          name: data.name || file.name,
+          size: data.size || fallbackSizeStr,
+          url: data.url
+        });
+      }
+    } catch (err) {
+      console.error('Workstream message file upload failed:', err);
+    } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };

@@ -15,19 +15,33 @@ export const WorkstreamFilesTab: React.FC<WorkstreamFilesTabProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const sizeStr = file.size > 1024 * 1024 
-        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` 
-        : `${Math.round(file.size / 1024)} KB`;
-      
-      const fileUrl = URL.createObjectURL(file);
-      onUploadFile({
-        name: file.name,
-        size: sizeStr,
-        url: fileUrl
+    if (!file) return;
+
+    const fallbackSizeStr = file.size > 1024 * 1024 
+      ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` 
+      : `${Math.round(file.size / 1024)} KB`;
+
+    try {
+      const res = await fetch(`/api/workstream/upload?name=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream'
+        },
+        body: file
       });
+      if (res.ok) {
+        const data = await res.json();
+        onUploadFile({
+          name: data.name || file.name,
+          size: data.size || fallbackSizeStr,
+          url: data.url
+        });
+      }
+    } catch (err) {
+      console.error('Workstream file upload failed:', err);
+    } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -44,6 +58,21 @@ export const WorkstreamFilesTab: React.FC<WorkstreamFilesTabProps> = ({
       return <FileArchive className="w-5 h-5 text-amber-500" />;
     }
     return <FileText className="w-5 h-5 text-slate-500" />;
+  };
+
+  const handleDownload = (file: SharedFileItem) => {
+    if (onDownloadFile) {
+      onDownloadFile(file);
+      return;
+    }
+    if (!file.url || file.url === '#') return;
+    const downloadUrl = file.url.includes('?') ? `${file.url}&download=1` : `${file.url}?download=1`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = file.name || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -91,7 +120,7 @@ export const WorkstreamFilesTab: React.FC<WorkstreamFilesTabProps> = ({
             <div
               key={file.id}
               className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center gap-4 hover:border-emerald-300 hover:shadow-xs transition group cursor-pointer"
-              onClick={() => onDownloadFile ? onDownloadFile(file) : window.open(file.url, '_blank')}
+              onClick={() => handleDownload(file)}
             >
               <div className="p-3 bg-slate-50 rounded-xl group-hover:bg-emerald-50 transition shrink-0">
                 {getFileIcon(file.name)}
@@ -113,8 +142,7 @@ export const WorkstreamFilesTab: React.FC<WorkstreamFilesTabProps> = ({
                 title="Download"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (onDownloadFile) onDownloadFile(file);
-                  else window.open(file.url, '_blank');
+                  handleDownload(file);
                 }}
               >
                 <Download className="w-4 h-4" />

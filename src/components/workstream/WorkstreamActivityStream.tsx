@@ -133,7 +133,19 @@ export const WorkstreamActivityStream: React.FC<WorkstreamActivityStreamProps> =
                           </div>
                         </div>
                         <button
-                          onClick={() => onDownloadFile ? onDownloadFile(msg.fileInfo!) : window.open(msg.fileInfo?.url, '_blank')}
+                          onClick={() => {
+                            if (onDownloadFile && msg.fileInfo) {
+                              onDownloadFile(msg.fileInfo);
+                            } else if (msg.fileInfo?.url && msg.fileInfo.url !== '#') {
+                              const downloadUrl = msg.fileInfo.url.includes('?') ? `${msg.fileInfo.url}&download=1` : `${msg.fileInfo.url}?download=1`;
+                              const link = document.createElement('a');
+                              link.href = downloadUrl;
+                              link.download = msg.fileInfo.name || 'download';
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }
+                          }}
                           className={`p-2 rounded-xl transition ${
                             isMe 
                               ? 'hover:bg-white/20 text-white' 

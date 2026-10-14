@@ -58,6 +58,17 @@ export const WorkstreamWorkspace: React.FC<WorkstreamWorkspaceProps> = ({
   const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
   const [isVideoCallModalOpen, setIsVideoCallModalOpen] = useState(false);
 
+  const handleDownloadFile = (f: { name: string; url: string }) => {
+    if (!f.url || f.url === '#') return;
+    const downloadUrl = f.url.includes('?') ? `${f.url}&download=1` : `${f.url}?download=1`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = f.name || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const getStatusBadge = () => {
     switch (order.status) {
       case 'completed':
@@ -190,7 +201,7 @@ export const WorkstreamWorkspace: React.FC<WorkstreamWorkspaceProps> = ({
                     currentUserId={currentUser?.id}
                     usersList={usersList}
                     partnerUser={partner}
-                    onDownloadFile={(f) => window.open(f.url, '_blank')}
+                    onDownloadFile={handleDownloadFile}
                   />
                   <WorkstreamMessageInput
                     onSendMessage={onSendMessage}
@@ -201,7 +212,7 @@ export const WorkstreamWorkspace: React.FC<WorkstreamWorkspaceProps> = ({
                 <WorkstreamFilesTab
                   files={files}
                   onUploadFile={onAttachFile}
-                  onDownloadFile={(f) => window.open(f.url, '_blank')}
+                  onDownloadFile={handleDownloadFile}
                 />
               )}
             </div>

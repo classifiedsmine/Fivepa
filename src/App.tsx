@@ -30,6 +30,8 @@ import {
   WorkstreamFilter,
   SharedFileItem
 } from './components/workstream';
+import { useWorkstream } from './hooks/workstream/useWorkstream';
+import { financeLedger } from './server/financeLedger';
 import { 
   WishlistModal, 
   EmailNotificationsModal, 
@@ -183,13 +185,6 @@ export default function App() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [newMessageText, setNewMessageText] = useState('');
 
-  const { reviews, setReviews, handleReleaseEscrow } = useEscrowReviews({
-    selectedOrder,
-    setOrders,
-    setSelectedOrder,
-    setMessages
-  });
-
   // Workstream / People / Seller Profile state (PeoplePerHour style)
   const [workstreamTab, setWorkstreamTab] = useState<WorkstreamFilter>('all');
   const [activeWorkstreamSubTab, setActiveWorkstreamSubTab] = useState<'activity' | 'files'>('activity');
@@ -201,59 +196,7 @@ export default function App() {
   const [isStartWorkstreamModalOpen, setIsStartWorkstreamModalOpen] = useState(false);
   const [profileTab, setProfileTab] = useState<'gigs' | 'portfolio' | 'reviews' | 'endorsements'>('gigs');
 
-  // Unified hydrated workstreams for the active session
-  const hydratedWorkstreamItems: WorkstreamItem[] = useMemo(() => {
-    const activeUid = impersonatedUser ? impersonatedUser.id : currentUser?.id;
-    const relevantOrders = activeUid 
-      ? orders.filter(o => o.buyerId === activeUid || o.sellerId === activeUid || currentUser?.role === 'super_admin' || currentUser?.role === 'admin')
-      : orders;
 
-    return relevantOrders.map(o => {
-      const seller = usersList.find(u => u.id === o.sellerId);
-      const buyer = usersList.find(u => u.id === o.buyerId);
-      const gig = gigs.find(g => g.id === o.gigId);
-      const lastMsg = messages.filter(m => m.orderId === o.id).slice(-1)[0];
-      return {
-        ...o,
-        seller,
-        buyer,
-        gig,
-        lastMessage: lastMsg ? lastMsg.text : undefined,
-        lastMessageTime: lastMsg ? lastMsg.timestamp : undefined
-      };
-    });
-  }, [orders, usersList, gigs, messages, currentUser, impersonatedUser]);
-
-  const filteredWorkstreamItems = useMemo(() => {
-    return hydratedWorkstreamItems.filter(w => {
-      // Tab filter
-      if (workstreamTab === 'inbox' && !['funded_in_escrow', 'in_progress'].includes(w.status)) return false;
-      if (workstreamTab === 'discussion' && w.status !== 'in_progress') return false;
-      if (workstreamTab === 'in_progress' && w.status !== 'in_progress') return false;
-      if (workstreamTab === 'delivered' && w.status !== 'delivered') return false;
-      if (workstreamTab === 'completed' && w.status !== 'completed') return false;
-      if (workstreamTab === 'starred' && !starredWorkstreams.includes(w.id)) return false;
-      if (workstreamTab === 'escrow' && (w.amount <= 0 || w.status === 'cancelled')) return false;
-      if (workstreamTab === 'archived' && w.status !== 'cancelled') return false;
-
-      // Person filter
-      if (selectedPersonFilter && w.sellerId !== selectedPersonFilter && w.buyerId !== selectedPersonFilter) return false;
-
-      // Project filter
-      if (projectFilterSearch && !w.title.toLowerCase().includes(projectFilterSearch.toLowerCase())) return false;
-
-      // Search query
-      if (workstreamSearch) {
-        const q = workstreamSearch.toLowerCase();
-        const matchesTitle = w.title.toLowerCase().includes(q);
-        const matchesId = w.id.toLowerCase().includes(q);
-        const matchesSeller = w.seller?.name.toLowerCase().includes(q);
-        if (!matchesTitle && !matchesId && !matchesSeller) return false;
-      }
-
-      return true;
-    });
-  }, [hydratedWorkstreamItems, workstreamTab, starredWorkstreams, selectedPersonFilter, projectFilterSearch, workstreamSearch]);
 
   const activeSharedFiles: SharedFileItem[] = useMemo(() => {
     if (!selectedOrder) return [];
@@ -271,64 +214,7 @@ export default function App() {
 
 
 
-  const handleDeliverWork = (delivery: { notes: string; files: Array<{ name: string; size: string; url: string }> }) => {
-    if (!selectedOrder) return;
-    setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, status: 'delivered' } : o));
-    setSelectedOrder(prev => prev ? { ...prev, status: 'delivered' } : null);
 
-    const sysMsg: Message = {
-      id: `msg_${Date.now()}`,
-      orderId: selectedOrder.id,
-      senderId: 'system',
-      senderName: 'WorkSphere Deliveries',
-      text: `📦 Deliverables submitted for review: "${delivery.notes}"`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: 'system'
-    };
-    setMessages(prev => [...prev, sysMsg]);
-  };
-
-  const handleRequestRevision = (reason: string) => {
-    if (!selectedOrder) return;
-    setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, status: 'revision' } : o));
-    setSelectedOrder(prev => prev ? { ...prev, status: 'revision' } : null);
-
-    const sysMsg: Message = {
-      id: `msg_${Date.now()}`,
-      orderId: selectedOrder.id,
-      senderId: 'system',
-      senderName: 'WorkSphere Revision Desk',
-      text: `🔄 Revision requested by buyer: "${reason}"`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: 'system'
-    };
-    setMessages(prev => [...prev, sysMsg]);
-  };
-
-  const handleStartWorkstreamModalSubmit = (data: {
-    title: string;
-    partnerId: string;
-    amount: number;
-    turnaroundDays: number;
-    requirements: string;
-  }) => {
-    const activeUid = impersonatedUser ? impersonatedUser.id : (currentUser?.id || 'admin_user');
-    const newOrd: Order = {
-      id: `ord_${Date.now()}`,
-      title: data.title,
-      buyerId: activeUid,
-      sellerId: data.partnerId,
-      amount: data.amount,
-      status: 'in_progress',
-      createdAt: new Date().toISOString().split('T')[0],
-      dueDate: new Date(Date.now() + data.turnaroundDays * 86400000).toISOString().split('T')[0],
-      requirements: data.requirements
-    };
-    setOrders(prev => [newOrd, ...prev]);
-    setSelectedOrder(newOrd);
-    setIsStartWorkstreamModalOpen(false);
-    navigate(`/messages/${newOrd.id}`);
-  };
 
   const [ticketReplyText, setTicketReplyText] = useState<string>('');
   const [disputeNotesText, setDisputeNotesText] = useState<string>('');
@@ -524,7 +410,7 @@ export default function App() {
   const [extraTitleInput, setExtraTitleInput] = useState('');
   const [extraPriceInput, setExtraPriceInput] = useState(50);
 
-  const wsRef = useRef<WebSocket | null>(null);
+
 
   const handleAddGigExtra = () => {
     if (!extraTitleInput.trim() || extraPriceInput <= 0) return;
@@ -687,6 +573,27 @@ export default function App() {
     setPath(to);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const { 
+    hydratedWorkstreamItems, 
+    filteredWorkstreamItems,
+    selectedOrder: hookSelectedOrder, 
+    setSelectedOrder: hookSetSelectedOrder, 
+    messages: hookMessages, 
+    setMessages: hookSetMessages,
+    newMessageText: hookNewMessageText, 
+    setNewMessageText: hookSetNewMessageText, 
+    fetchMessages,
+    handleReleaseEscrow,
+    handleDeliverWork,
+    onRequestRevision,
+    wsRef
+  } = useWorkstream({ 
+    orders, usersList, gigs, messages, currentUser, impersonatedUser,
+    workstreamTab, starredWorkstreams, selectedPersonFilter, projectFilterSearch, workstreamSearch,
+    setOrders, setSelectedOrder, setIsStartWorkstreamModalOpen, navigate, financeLedger,
+    selectedOrder, setNewMessageText
+  });
 
   // Fetch initial data & restore user session
   useEffect(() => {
@@ -932,28 +839,7 @@ export default function App() {
     }
   };
 
-  const fetchMessages = async (orderId: string) => {
-    try {
-      const token = localStorage.getItem('workperhour_token') || localStorage.getItem('token');
-      console.log('DEBUG: Fetching messages for', orderId, 'with token', token);
-      const res = await fetch(`/api/messages/${orderId}`, {
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
-      });
-      if (res.status === 401) {
-        console.error('DEBUG: Authentication required');
-        return;
-      }
-      const data = await safeJson(res, []);
-      if (!res.ok) {
-        console.error('DEBUG: Fetch failed', res.status, res.statusText);
-      }
-      setMessages(data);
-    } catch (err) {
-      console.error('DEBUG: Fetch error', err);
-    }
-  };
+
 
   const handleContactSeller = async (sellerId: string, sellerName: string, gigTitle: string) => {
     const currentUid = impersonatedUser ? impersonatedUser.id : currentUser?.id;
